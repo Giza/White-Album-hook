@@ -65,7 +65,8 @@ unsigned char g_trampolineCode[] = {
 unsigned char g_trampolineCode2[] = {
     0x3D, 0x91, 0xD1, 0x00, 0x00,  // cmp eax, 0xD191
     0x77, 0x05,                    // ja [метка перехода, если > D191]
-    0xE9, 0x00, 0x00, 0x00, 0x00   // jmp [оригинальный адрес возврата]
+    0xE9, 0x00, 0x00, 0x00, 0x00,   // jmp [оригинальный адрес возврата]
+    0xE9, 0x00, 0x00, 0x00, 0x00
 };
 
 // Получение базового адреса модуля
@@ -536,10 +537,41 @@ bool InstallRangeHook2() {
         
         WriteLog("Выделена память для второго трамплина по адресу: 0x%08X", g_trampolineAddress2);
         
+        // В функции InstallRangeHook2() исправляем расчет адреса для ja
+        // Поскольку инструкция ja 0x424efd - это относительный короткий прыжок,
+        // нам нужно интерпретировать это правильно, используя полный адрес
+
+        // Получаем адрес инструкции ja (это g_originalAddress2)
+        // Получаем значение байта смещения после ja (это второй байт инструкции)
+        signed char jaOffset = *(signed char*)(g_originalAddress2 + 4);
+        // Вычисляем адрес назначения: адрес следующей инструкции + смещение
+        DWORD jaTargetAddress = (g_originalAddress2 + 5) + jaOffset;
+
+        // Для проверки получим адрес напрямую
+        DWORD expectedAddress = 0x00264EFD; // Адрес, который вы видите в дизассемблере
+
+        WriteLog("Адрес инструкции ja: 0x%08X", g_originalAddress2);
+        WriteLog("Смещение ja (signed): %d", (int)jaOffset);
+        WriteLog("Вычисленный адрес назначения ja: 0x%08X", jaTargetAddress);
+        WriteLog("Ожидаемый адрес: 0x%08X", expectedAddress);
+
+        // Используем ожидаемый адрес, если он известен точно
+        jaTargetAddress = expectedAddress;
+
+        // Проверка корректности адреса
+        WriteLog("Байты по целевому адресу ja 0x%08X (первые 5):", jaTargetAddress);
+        unsigned char targetBytes[5] = {0};
+        memcpy(targetBytes, reinterpret_cast<void*>(jaTargetAddress), sizeof(targetBytes));
+        WriteLog("%02X %02X %02X %02X %02X", targetBytes[0], targetBytes[1], targetBytes[2], targetBytes[3], targetBytes[4]);
+
         // Подготавливаем код трамплина
-        // Заполняем адрес возврата в инструкции jmp
+        // Заполняем адрес возврата в первой инструкции jmp
         DWORD relativeJump = g_returnAddress2 - (g_trampolineAddress2 + 13);
         *(DWORD*)(g_trampolineCode2 + 8) = relativeJump;
+
+        // Заполняем адрес для ja во второй инструкции jmp
+        DWORD jaJump = jaTargetAddress - (g_trampolineAddress2 + 18);
+        *(DWORD*)(g_trampolineCode2 + 13) = jaJump;
         
         // Копируем код трамплина в выделенную память
         memcpy((void*)g_trampolineAddress2, g_trampolineCode2, sizeof(g_trampolineCode2));
