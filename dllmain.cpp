@@ -537,32 +537,13 @@ bool InstallRangeHook2() {
         
         WriteLog("Выделена память для второго трамплина по адресу: 0x%08X", g_trampolineAddress2);
         
-        // В функции InstallRangeHook2() исправляем расчет адреса для ja
-        // Поскольку инструкция ja 0x424efd - это относительный короткий прыжок,
-        // нам нужно интерпретировать это правильно, используя полный адрес
-
-        // Получаем адрес инструкции ja (это g_originalAddress2)
-        // Получаем значение байта смещения после ja (это второй байт инструкции)
-        signed char jaOffset = *(signed char*)(g_originalAddress2 + 4);
-        // Вычисляем адрес назначения: адрес следующей инструкции + смещение
-        DWORD jaTargetAddress = (g_originalAddress2 + 5) + jaOffset;
-
-        // Для проверки получим адрес напрямую
-        DWORD expectedAddress = 0x00264EFD; // Адрес, который вы видите в дизассемблере
+        // Получаем значение смещения из оригинальной инструкции ja XX
+        signed char jaOffset = 0x63; // Это значение из оригинального кода (77 63)
+        DWORD jaTargetAddress = g_originalAddress2 + 5 + jaOffset; // адрес следующей инструкции + смещение
 
         WriteLog("Адрес инструкции ja: 0x%08X", g_originalAddress2);
-        WriteLog("Смещение ja (signed): %d", (int)jaOffset);
+        WriteLog("Смещение ja: 0x%02X (%d)", (unsigned char)jaOffset, (int)jaOffset);
         WriteLog("Вычисленный адрес назначения ja: 0x%08X", jaTargetAddress);
-        WriteLog("Ожидаемый адрес: 0x%08X", expectedAddress);
-
-        // Используем ожидаемый адрес, если он известен точно
-        jaTargetAddress = expectedAddress;
-
-        // Проверка корректности адреса
-        WriteLog("Байты по целевому адресу ja 0x%08X (первые 5):", jaTargetAddress);
-        unsigned char targetBytes[5] = {0};
-        memcpy(targetBytes, reinterpret_cast<void*>(jaTargetAddress), sizeof(targetBytes));
-        WriteLog("%02X %02X %02X %02X %02X", targetBytes[0], targetBytes[1], targetBytes[2], targetBytes[3], targetBytes[4]);
 
         // Подготавливаем код трамплина
         // Заполняем адрес возврата в первой инструкции jmp
