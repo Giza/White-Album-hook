@@ -69,6 +69,32 @@ unsigned char g_trampolineCode2[] = {
     0xE9, 0x00, 0x00, 0x00, 0x00
 };
 
+// Путь к файлу второго шрифта - рядом с DLL
+const char* fontFilePath2 = "custom_font_46.bin";
+
+// Адрес, по которому будут загружены данные второго шрифта
+DWORD g_fontDataAddress2 = 0;
+
+// Буфер для хранения данных второго шрифта
+std::vector<unsigned char> g_fontData2;
+
+// Байты оригинальной функции для поиска сигнатуры второго шрифта с маской
+const unsigned char originalFontBytes2[] = { 0xC7, 0x46, 0x30, 0x48, 0x15, 0x00, 0x00 };
+const unsigned char fontBytesMask2[] =    { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00 };
+
+// Путь к файлу третьего шрифта - рядом с DLL
+const char* fontFilePath3 = "custom_font_25.bin";
+
+// Адрес, по которому будут загружены данные третьего шрифта
+DWORD g_fontDataAddress3 = 0;
+
+// Буфер для хранения данных третьего шрифта
+std::vector<unsigned char> g_fontData3;
+
+// Байты оригинальной функции для поиска сигнатуры третьего шрифта с маской
+const unsigned char originalFontBytes3[] = { 0xC7, 0x46, 0x30, 0xD0, 0x16, 0x00, 0x00 };
+const unsigned char fontBytesMask3[] =    { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00 };
+
 // Получение базового адреса модуля
 DWORD GetBaseAddress() {
     return (DWORD)GetModuleHandleA(NULL);
@@ -249,6 +275,234 @@ bool LoadFontData() {
     }
 }
 
+// Загрузка данных второго шрифта из файла
+bool LoadFontData2() {
+    try {
+        // Создаем полный путь к файлу на основе пути DLL
+        char dllPath[MAX_PATH] = {0};
+        char fontPath[MAX_PATH] = {0};
+        
+        GetModuleFileNameA(GetModuleHandleA("WAMemories_Hook.asi"), dllPath, MAX_PATH);
+        
+        // Находим последний слеш в пути и заменяем имя файла
+        char* lastSlash = strrchr(dllPath, '\\');
+        if (lastSlash) {
+            size_t prefixLen = lastSlash - dllPath + 1;
+            strncpy_s(fontPath, dllPath, prefixLen);
+            strcat_s(fontPath, fontFilePath2);
+        } else {
+            strcpy_s(fontPath, fontFilePath2);
+        }
+        
+        WriteLog("Попытка загрузки второго шрифта из: %s", fontPath);
+        
+        std::ifstream file(fontPath, std::ios::binary);
+        if (!file.is_open()) {
+            WriteLog("Не удалось открыть файл второго шрифта: %s", fontPath);
+            
+            // Пробуем открыть в текущей директории
+            file.open(fontFilePath2, std::ios::binary);
+            if (!file.is_open()) {
+                WriteLog("Не удалось открыть файл второго шрифта в текущей директории: %s", fontFilePath2);
+                return false;
+            }
+            WriteLog("Файл второго шрифта открыт в текущей директории");
+        }
+
+        // Определяем размер файла
+        file.seekg(0, std::ios::end);
+        size_t fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+        
+        WriteLog("Размер файла второго шрифта: %zu байт", fileSize);
+
+        if (fileSize == 0) {
+            WriteLog("Файл второго шрифта пуст!");
+            return false;
+        }
+
+        // Читаем данные в буфер
+        g_fontData2.resize(fileSize);
+        file.read(reinterpret_cast<char*>(g_fontData2.data()), fileSize);
+        file.close();
+
+        // Выделяем память для данных шрифта с соответствующими правами доступа
+        g_fontDataAddress2 = reinterpret_cast<DWORD>(VirtualAlloc(NULL, fileSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+        if (g_fontDataAddress2 == 0) {
+            WriteLog("Не удалось выделить память для данных второго шрифта!");
+            return false;
+        }
+
+        // Копируем данные в выделенную память
+        memcpy(reinterpret_cast<void*>(g_fontDataAddress2), g_fontData2.data(), fileSize);
+        
+        WriteLog("Данные второго шрифта загружены в память по адресу: 0x%08X", g_fontDataAddress2);
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        WriteLog("Исключение при загрузке второго шрифта: %s", e.what());
+        return false;
+    }
+}
+
+// Загрузка данных третьего шрифта из файла
+bool LoadFontData3() {
+    try {
+        // Создаем полный путь к файлу на основе пути DLL
+        char dllPath[MAX_PATH] = {0};
+        char fontPath[MAX_PATH] = {0};
+        
+        GetModuleFileNameA(GetModuleHandleA("WAMemories_Hook.asi"), dllPath, MAX_PATH);
+        
+        // Находим последний слеш в пути и заменяем имя файла
+        char* lastSlash = strrchr(dllPath, '\\');
+        if (lastSlash) {
+            size_t prefixLen = lastSlash - dllPath + 1;
+            strncpy_s(fontPath, dllPath, prefixLen);
+            strcat_s(fontPath, fontFilePath3);
+        } else {
+            strcpy_s(fontPath, fontFilePath3);
+        }
+        
+        WriteLog("Попытка загрузки третьего шрифта из: %s", fontPath);
+        
+        std::ifstream file(fontPath, std::ios::binary);
+        if (!file.is_open()) {
+            WriteLog("Не удалось открыть файл третьего шрифта: %s", fontPath);
+            
+            // Пробуем открыть в текущей директории
+            file.open(fontFilePath3, std::ios::binary);
+            if (!file.is_open()) {
+                WriteLog("Не удалось открыть файл третьего шрифта в текущей директории: %s", fontFilePath3);
+                return false;
+            }
+            WriteLog("Файл третьего шрифта открыт в текущей директории");
+        }
+
+        // Определяем размер файла
+        file.seekg(0, std::ios::end);
+        size_t fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+        
+        WriteLog("Размер файла третьего шрифта: %zu байт", fileSize);
+
+        if (fileSize == 0) {
+            WriteLog("Файл третьего шрифта пуст!");
+            return false;
+        }
+
+        // Читаем данные в буфер
+        g_fontData3.resize(fileSize);
+        file.read(reinterpret_cast<char*>(g_fontData3.data()), fileSize);
+        file.close();
+
+        // Выделяем память для данных шрифта с соответствующими правами доступа
+        g_fontDataAddress3 = reinterpret_cast<DWORD>(VirtualAlloc(NULL, fileSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+        if (g_fontDataAddress3 == 0) {
+            WriteLog("Не удалось выделить память для данных третьего шрифта!");
+            return false;
+        }
+
+        // Копируем данные в выделенную память
+        memcpy(reinterpret_cast<void*>(g_fontDataAddress3), g_fontData3.data(), fileSize);
+        
+        WriteLog("Данные третьего шрифта загружены в память по адресу: 0x%08X", g_fontDataAddress3);
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        WriteLog("Исключение при загрузке третьего шрифта: %s", e.what());
+        return false;
+    }
+}
+
+// Функция для создания перехвата третьего шрифта
+bool InstallFontHook3() {
+    try {
+        // Получаем актуальный базовый адрес
+        DWORD baseAddress = GetBaseAddress();
+        WriteLog("Поиск третьего шрифта. Базовый адрес: 0x%08X", baseAddress);
+        
+        // Ищем сигнатуру в памяти с использованием маски
+        DWORD hookAddress = FindSignatureWithMask(originalFontBytes3, fontBytesMask3, sizeof(originalFontBytes3), baseAddress, baseAddress + 0x1000000);
+        if (hookAddress == 0) {
+            WriteLog("Не удалось найти сигнатуру третьего шрифта в памяти. Попробуем использовать альтернативный поиск.");
+            
+            // Альтернативный поиск: ищем только первые 3 байта, так как константа может отличаться 
+            const unsigned char partialSignature[] = { 0xC7, 0x46, 0x30 };
+            const unsigned char partialMask[] = { 0xFF, 0xFF, 0xFF };
+            hookAddress = FindSignatureWithMask(partialSignature, partialMask, sizeof(partialSignature), baseAddress, baseAddress + 0x1000000);
+            
+            if (hookAddress == 0) {
+                WriteLog("Сигнатуру третьего шрифта не удалось найти даже частично. Хук не может быть установлен.");
+                return false;
+            }
+            
+            WriteLog("Найдена частичная сигнатура третьего шрифта по адресу: 0x%08X", hookAddress);
+        }
+        
+        // Выводим байты по адресу для проверки
+        unsigned char currentBytes[7] = {0};
+        memcpy(currentBytes, reinterpret_cast<void*>(hookAddress), sizeof(currentBytes));
+        
+        WriteLog("Байты третьего шрифта по найденному адресу 0x%08X: %02X %02X %02X %02X %02X %02X %02X", 
+                 hookAddress, 
+                 currentBytes[0], currentBytes[1], currentBytes[2], 
+                 currentBytes[3], currentBytes[4], currentBytes[5], currentBytes[6]);
+
+        // Снимаем защиту с памяти
+        DWORD oldProtect;
+        if (!VirtualProtect(reinterpret_cast<void*>(hookAddress), 7, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            WriteLog("Не удалось снять защиту с памяти для хука третьего шрифта! GetLastError: %d", GetLastError());
+            return false;
+        }
+
+        // Подготавливаем новую инструкцию: mov [esi+30], g_fontDataAddress3
+        unsigned char newBytes[7];
+        newBytes[0] = 0xC7;      // mov
+        newBytes[1] = 0x46;      // [esi+
+        newBytes[2] = 0x30;      // 0x30]
+        
+        // Копируем адрес нашего буфера (little-endian)
+        *reinterpret_cast<DWORD*>(&newBytes[3]) = g_fontDataAddress3;
+
+        // Записываем новую инструкцию
+        WriteLog("Запись новых байтов третьего шрифта: %02X %02X %02X %02X %02X %02X %02X",
+                 newBytes[0], newBytes[1], newBytes[2], 
+                 newBytes[3], newBytes[4], newBytes[5], newBytes[6]);
+        
+        memcpy(reinterpret_cast<void*>(hookAddress), newBytes, 7);
+
+        // Восстанавливаем защиту памяти
+        DWORD unused;
+        if (!VirtualProtect(reinterpret_cast<void*>(hookAddress), 7, oldProtect, &unused)) {
+            WriteLog("Не удалось восстановить защиту памяти для хука третьего шрифта! GetLastError: %d", GetLastError());
+            // Продолжаем выполнение
+        }
+
+        // Проверяем, что байты успешно записаны
+        unsigned char verifyBytes[7] = {0};
+        memcpy(verifyBytes, reinterpret_cast<void*>(hookAddress), sizeof(verifyBytes));
+        
+        WriteLog("Байты третьего шрифта после записи: %02X %02X %02X %02X %02X %02X %02X", 
+                 verifyBytes[0], verifyBytes[1], verifyBytes[2], 
+                 verifyBytes[3], verifyBytes[4], verifyBytes[5], verifyBytes[6]);
+        
+        if (memcmp(verifyBytes, newBytes, 7) != 0) {
+            WriteLog("Не удалось записать новые байты третьего шрифта!");
+            return false;
+        }
+        
+        WriteLog("Хук третьего шрифта успешно установлен по адресу: 0x%08X", hookAddress);
+        return true;
+    }
+    catch (const std::exception& e) {
+        WriteLog("Исключение при установке хука третьего шрифта: %s", e.what());
+        return false;
+    }
+}
+
 // Функция для создания перехвата шрифта
 bool InstallFontHook() {
     try {
@@ -261,7 +515,7 @@ bool InstallFontHook() {
         if (hookAddress == 0) {
             WriteLog("Не удалось найти сигнатуру шрифта в памяти. Попробуем использовать альтернативный поиск.");
             
-            // Альтернативный поиск: ищем только первые 3 байта, так как константа может отличаться
+            // Альтернативный поиск: ищем только первые 3 байта, так как константа может отличаться 
             const unsigned char partialSignature[] = { 0xC7, 0x46, 0x30 };
             const unsigned char partialMask[] = { 0xFF, 0xFF, 0xFF };
             hookAddress = FindSignatureWithMask(partialSignature, partialMask, sizeof(partialSignature), baseAddress, baseAddress + 0x1000000);
@@ -331,6 +585,92 @@ bool InstallFontHook() {
     }
     catch (const std::exception& e) {
         WriteLog("Исключение при установке хука шрифта: %s", e.what());
+        return false;
+    }
+}
+
+// Функция для создания перехвата второго шрифта
+bool InstallFontHook2() {
+    try {
+        // Получаем актуальный базовый адрес
+        DWORD baseAddress = GetBaseAddress();
+        WriteLog("Поиск второго шрифта. Базовый адрес: 0x%08X", baseAddress);
+        
+        // Ищем сигнатуру в памяти с использованием маски
+        DWORD hookAddress = FindSignatureWithMask(originalFontBytes2, fontBytesMask2, sizeof(originalFontBytes2), baseAddress, baseAddress + 0x1000000);
+        if (hookAddress == 0) {
+            WriteLog("Не удалось найти сигнатуру второго шрифта в памяти. Попробуем использовать альтернативный поиск.");
+            
+            // Альтернативный поиск: ищем только первые 3 байта, так как константа может отличаться 
+            const unsigned char partialSignature[] = { 0xC7, 0x46, 0x30 };
+            const unsigned char partialMask[] = { 0xFF, 0xFF, 0xFF };
+            hookAddress = FindSignatureWithMask(partialSignature, partialMask, sizeof(partialSignature), baseAddress, baseAddress + 0x1000000);
+            
+            if (hookAddress == 0) {
+                WriteLog("Сигнатуру второго шрифта не удалось найти даже частично. Хук не может быть установлен.");
+                return false;
+            }
+            
+            WriteLog("Найдена частичная сигнатура второго шрифта по адресу: 0x%08X", hookAddress);
+        }
+        
+        // Выводим байты по адресу для проверки
+        unsigned char currentBytes[7] = {0};
+        memcpy(currentBytes, reinterpret_cast<void*>(hookAddress), sizeof(currentBytes));
+        
+        WriteLog("Байты второго шрифта по найденному адресу 0x%08X: %02X %02X %02X %02X %02X %02X %02X", 
+                 hookAddress, 
+                 currentBytes[0], currentBytes[1], currentBytes[2], 
+                 currentBytes[3], currentBytes[4], currentBytes[5], currentBytes[6]);
+
+        // Снимаем защиту с памяти
+        DWORD oldProtect;
+        if (!VirtualProtect(reinterpret_cast<void*>(hookAddress), 7, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            WriteLog("Не удалось снять защиту с памяти для хука второго шрифта! GetLastError: %d", GetLastError());
+            return false;
+        }
+
+        // Подготавливаем новую инструкцию: mov [esi+30], g_fontDataAddress2
+        unsigned char newBytes[7];
+        newBytes[0] = 0xC7;      // mov
+        newBytes[1] = 0x46;      // [esi+
+        newBytes[2] = 0x30;      // 0x30]
+        
+        // Копируем адрес нашего буфера (little-endian)
+        *reinterpret_cast<DWORD*>(&newBytes[3]) = g_fontDataAddress2;
+
+        // Записываем новую инструкцию
+        WriteLog("Запись новых байтов второго шрифта: %02X %02X %02X %02X %02X %02X %02X",
+                 newBytes[0], newBytes[1], newBytes[2], 
+                 newBytes[3], newBytes[4], newBytes[5], newBytes[6]);
+        
+        memcpy(reinterpret_cast<void*>(hookAddress), newBytes, 7);
+
+        // Восстанавливаем защиту памяти
+        DWORD unused;
+        if (!VirtualProtect(reinterpret_cast<void*>(hookAddress), 7, oldProtect, &unused)) {
+            WriteLog("Не удалось восстановить защиту памяти для хука второго шрифта! GetLastError: %d", GetLastError());
+            // Продолжаем выполнение
+        }
+
+        // Проверяем, что байты успешно записаны
+        unsigned char verifyBytes[7] = {0};
+        memcpy(verifyBytes, reinterpret_cast<void*>(hookAddress), sizeof(verifyBytes));
+        
+        WriteLog("Байты второго шрифта после записи: %02X %02X %02X %02X %02X %02X %02X", 
+                 verifyBytes[0], verifyBytes[1], verifyBytes[2], 
+                 verifyBytes[3], verifyBytes[4], verifyBytes[5], verifyBytes[6]);
+        
+        if (memcmp(verifyBytes, newBytes, 7) != 0) {
+            WriteLog("Не удалось записать новые байты второго шрифта!");
+            return false;
+        }
+        
+        WriteLog("Хук второго шрифта успешно установлен по адресу: 0x%08X", hookAddress);
+        return true;
+    }
+    catch (const std::exception& e) {
+        WriteLog("Исключение при установке хука второго шрифта: %s", e.what());
         return false;
     }
 }
@@ -652,6 +992,34 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             return TRUE; // Продолжаем работу, даже если не удалось установить хук
         }
         
+        // Загружаем данные второго шрифта
+        if (!LoadFontData2()) {
+            WriteLog("Ошибка при загрузке второго шрифта");
+            MessageBoxA(NULL, "Не удалось загрузить файл второго шрифта. Проверьте лог.", "WAMemories Hook", MB_ICONERROR);
+            return TRUE; // Продолжаем работу, даже если не удалось загрузить второй шрифт
+        }
+        
+        // Устанавливаем хук второго шрифта
+        if (!InstallFontHook2()) {
+            WriteLog("Ошибка при установке хука второго шрифта");
+            MessageBoxA(NULL, "Не удалось установить хук второго шрифта. Проверьте лог.", "WAMemories Hook", MB_ICONERROR);
+            return TRUE; // Продолжаем работу, даже если не удалось установить хук
+        }
+        
+        // Загружаем данные третьего шрифта
+        if (!LoadFontData3()) {
+            WriteLog("Ошибка при загрузке третьего шрифта");
+            MessageBoxA(NULL, "Не удалось загрузить файл третьего шрифта. Проверьте лог.", "WAMemories Hook", MB_ICONERROR);
+            return TRUE; // Продолжаем работу, даже если не удалось загрузить третий шрифт
+        }
+        
+        // Устанавливаем хук третьего шрифта
+        if (!InstallFontHook3()) {
+            WriteLog("Ошибка при установке хука третьего шрифта");
+            MessageBoxA(NULL, "Не удалось установить хук третьего шрифта. Проверьте лог.", "WAMemories Hook", MB_ICONERROR);
+            return TRUE; // Продолжаем работу, даже если не удалось установить хук
+        }
+        
         WriteLog("Инициализация DLL завершена успешно");
         break;
         
@@ -691,6 +1059,18 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         if (g_fontDataAddress != 0) {
             VirtualFree(reinterpret_cast<void*>(g_fontDataAddress), 0, MEM_RELEASE);
             WriteLog("Память для шрифта освобождена");
+        }
+        
+        // Освобождаем выделенную память для второго шрифта
+        if (g_fontDataAddress2 != 0) {
+            VirtualFree(reinterpret_cast<void*>(g_fontDataAddress2), 0, MEM_RELEASE);
+            WriteLog("Память для второго шрифта освобождена");
+        }
+        
+        // Освобождаем выделенную память для третьего шрифта
+        if (g_fontDataAddress3 != 0) {
+            VirtualFree(reinterpret_cast<void*>(g_fontDataAddress3), 0, MEM_RELEASE);
+            WriteLog("Память для третьего шрифта освобождена");
         }
         
         WriteLog("DLL выгружена из процесса");
